@@ -35,6 +35,7 @@ count=$(wc -l < /tmp/manifest.txt)
 echo "Hydrated $count files from $BASE"
 
 touch .bootstrapped
+[ -f web/_env ] && mv web/_env web/.env
 git config user.name "rork-bootstrap"
 git config user.email "rork@rork.app"
 git add -A

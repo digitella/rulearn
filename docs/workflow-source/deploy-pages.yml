@@ -1,8 +1,67 @@
-name: ZZ Test
+# Copy this file to .github/workflows/deploy-pages.yml to activate deploy.
+# (Rork does not allow creating workflow files via the API.)
+
+name: Deploy to GitHub Pages
+
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # First run: hydrate the repository (sources are downloaded from the
+  # Rork project preview, checksum-verified and committed back).
+  ASSET_SOURCE: https://mt4zoyc0q6n7ngh3fkkz4-web.rork.live
+
 jobs:
-  a:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - run: echo hi
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap (hydrate sources on first run)
+        run: bash .github/bootstrap.sh
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: web
+        run: bun install
+
+      - name: Build (base=/rulearn/)
+        working-directory: web
+        run: bun run build
+        env:
+          BASE_PATH: /rulearn/
+
+      - name: Verify dist contents
+        working-directory: web
+        run: |
+          test -f dist/course.json || { echo "course.json missing"; exit 1; }
+          test -f dist/media/real-audio.json || { echo "real-audio.json missing"; exit 1; }
+          count=$(ls dist/media/audio/*.mp3 2>/dev/null | wc -l)
+          echo "mp3 clips: $count"
+          test "$count" -ge 283 || { echo "expected 283 mp3"; exit 1; }
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
